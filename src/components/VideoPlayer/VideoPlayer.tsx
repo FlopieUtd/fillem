@@ -89,7 +89,7 @@ const Tooltip = ({ label, below = false, children }: { label: string; below?: bo
 export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const hideTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // Always holds the latest { id, time, duration } — never stale in closures
   const progressRef = useRef({ id: video.id, time: 0, duration: 0 });
   const loadStartRef = useRef(performance.now());
