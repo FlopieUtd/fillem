@@ -87,7 +87,7 @@ export const VideoCard = ({ video, onClick, progressRatio }: Props) => {
               </svg>
             </div>
             <span className="text-[12px] text-white font-medium">
-              {progressRatio !== undefined && progressRatio > 0 ? "Resume" : "Play"}
+              {progressRatio !== undefined && progressRatio > 0 && progressRatio < 0.95 ? "Resume" : "Play"}
             </span>
             <span className="text-[12px] text-[#aaa] ml-auto">{formatSize(video.size)}</span>
           </div>

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { VideoFile } from "../../types/media";
-import { getProgress, saveProgress, clearProgress } from "../../utils/progress";
+import { getProgress, saveProgress } from "../../utils/progress";
 
 interface Props {
   video: VideoFile;
@@ -296,7 +296,8 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
         }}
         onLoadedMetadata={() => setDuration(videoRef.current?.duration ?? 0)}
         onEnded={() => {
-          clearProgress(video.id);
+          const el = videoRef.current;
+          if (el?.duration) saveProgress(video.id, el.duration, el.duration);
           onNext?.();
         }}
         onVolumeChange={() => {
