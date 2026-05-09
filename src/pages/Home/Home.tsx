@@ -62,7 +62,7 @@ export const Home = () => {
             </svg>
           </div>
           <h1 className="text-[36px] font-bold text-white tracking-tight mb-[12px]">
-            Local Media
+            Fillem
           </h1>
           <p className="text-[16px] text-[#8c8c8c] leading-relaxed">
             Open a folder of video files and browse them like a streaming library.

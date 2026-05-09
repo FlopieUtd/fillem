@@ -172,7 +172,7 @@ export const Library = () => {
           <svg className="w-[28px] h-[28px] text-[#e50914]" fill="currentColor" viewBox="0 0 24 24">
             <path d="M8 5v14l11-7z" />
           </svg>
-          <span className="text-[18px] font-bold text-white tracking-wide">Local Media</span>
+          <span className="text-[18px] font-bold text-white tracking-wide">Fillem</span>
         </button>
 
         <div className="flex-1 max-w-[360px]">
