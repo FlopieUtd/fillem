@@ -96,7 +96,7 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
 
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [flash, setFlash] = useState<{ type: "play" | "pause"; key: number } | null>(null);
+  const [flash, setFlash] = useState<{ type: "play" | "pause" | "back" | "forward"; key: number } | null>(null);
   const flashCounter = useRef(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -239,6 +239,7 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
 
   const seek = (delta: number) => {
     if (videoRef.current) videoRef.current.currentTime += delta;
+    setFlash({ type: delta < 0 ? "back" : "forward", key: ++flashCounter.current });
   };
 
   const handleScrubClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -323,13 +324,26 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
           onAnimationEnd={() => setFlash(null)}
         >
           <div className="w-[96px] h-[96px] rounded-full bg-black/40 flex items-center justify-center">
-            {flash.type === "play" ? (
+            {flash.type === "play" && (
               <svg className="w-[48px] h-[48px] text-white ml-[4px]" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
-            ) : (
+            )}
+            {flash.type === "pause" && (
               <svg className="w-[44px] h-[44px] text-white" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+              </svg>
+            )}
+            {flash.type === "back" && (
+              <svg className="w-[48px] h-[48px] text-white" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
+                <text x="12" y="16" textAnchor="middle" fontSize="5.5" fontFamily="sans-serif" fill="currentColor">10</text>
+              </svg>
+            )}
+            {flash.type === "forward" && (
+              <svg className="w-[48px] h-[48px] text-white" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z" />
+                <text x="12" y="16" textAnchor="middle" fontSize="5.5" fontFamily="sans-serif" fill="currentColor">10</text>
               </svg>
             )}
           </div>
