@@ -141,10 +141,12 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
 
     const el = videoRef.current;
     if (!el) return;
-    el.muted = muted;
     const saved = getProgress(video.id);
     const resume = saved && saved.duration > 0 && saved.currentTime / saved.duration < 0.9;
     const onReady = () => {
+      // Re-apply audio state right before play — browser may reset it during src change
+      el.muted = muted;
+      el.volume = volume;
       if (resume) el.currentTime = saved.currentTime;
       el.play().catch(() => {});
     };
