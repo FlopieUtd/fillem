@@ -104,6 +104,12 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
   const [muted, setMuted] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [timerEnd, setTimerEnd] = useState<number | null>(null);
+  const [timerFinishEpisode, setTimerFinishEpisode] = useState(true);
+  const [timerMenuOpen, setTimerMenuOpen] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const timerFiredRef = useRef(false);
+  const timerButtonRef = useRef<HTMLDivElement>(null);
 
   // Enter fullscreen on mount
   useEffect(() => {
@@ -162,6 +168,41 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
   useEffect(() => {
     if (videoRef.current) videoRef.current.muted = muted;
   }, [muted]);
+
+  // Sleep timer — check every 10s
+  useEffect(() => {
+    if (!timerEnd) return;
+    setTimeLeft(Math.ceil((timerEnd - Date.now()) / 60000));
+    const id = setInterval(() => {
+      const remaining = timerEnd - Date.now();
+      if (remaining <= 0) {
+        if (!timerFinishEpisode) {
+          videoRef.current?.pause();
+          setTimerEnd(null);
+          setTimeLeft(null);
+        } else {
+          timerFiredRef.current = true;
+          setTimerEnd(null);
+          setTimeLeft(null);
+        }
+      } else {
+        setTimeLeft(Math.ceil(remaining / 60000));
+      }
+    }, 10000);
+    return () => clearInterval(id);
+  }, [timerEnd, timerFinishEpisode]);
+
+  // Close timer menu on outside click
+  useEffect(() => {
+    if (!timerMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (timerButtonRef.current && !timerButtonRef.current.contains(e.target as Node)) {
+        setTimerMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [timerMenuOpen]);
 
   // Save progress every 5s while playing (progressRef always current, no deps needed)
   useEffect(() => {
@@ -257,6 +298,20 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
     }
   };
 
+  const setTimer = (minutes: number) => {
+    setTimerEnd(Date.now() + minutes * 60000);
+    setTimeLeft(minutes);
+    timerFiredRef.current = false;
+    setTimerMenuOpen(false);
+  };
+
+  const cancelTimer = () => {
+    setTimerEnd(null);
+    setTimeLeft(null);
+    timerFiredRef.current = false;
+    setTimerMenuOpen(false);
+  };
+
   const VolumeIcon = muted || volume === 0 ? IconVolumeMute : volume < 0.5 ? IconVolumeLow : IconVolumeHigh;
   const progress = duration ? (currentTime / duration) * 100 : 0;
 
@@ -298,7 +353,12 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
         onEnded={() => {
           const el = videoRef.current;
           if (el?.duration) saveProgress(video.id, el.duration, el.duration);
-          onNext?.();
+          if (timerFiredRef.current) {
+            timerFiredRef.current = false;
+            handleClose();
+          } else {
+            onNext?.();
+          }
         }}
         onVolumeChange={() => {
           setVolume(videoRef.current?.volume ?? 1);
@@ -359,17 +419,73 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
       >
         <div className="flex items-center justify-between">
           <h2 className="text-white text-[22px] font-semibold drop-shadow-lg">{video.displayName}</h2>
-          <Tooltip label="Close" below>
-            <button
-              onClick={handleClose}
-              className="w-[32px] h-[32px] rounded-full bg-black/40 hover:bg-black/70 flex items-center justify-center transition-colors"
-              aria-label="Close"
-            >
-              <svg className="w-[20px] h-[20px] text-white" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </Tooltip>
+          <div className="flex items-center gap-[12px]">
+            {/* Sleep timer button + popover */}
+            <div ref={timerButtonRef} className="relative">
+              <Tooltip label={timeLeft ? `Sleep timer: ${timeLeft}m left` : "Sleep timer"} below>
+                <button
+                  onClick={() => setTimerMenuOpen((o) => !o)}
+                  className={`flex items-center gap-[6px] px-[10px] h-[32px] rounded-full transition-colors ${
+                    timeLeft
+                      ? "bg-[#e50914]/80 hover:bg-[#e50914] text-white"
+                      : "bg-black/40 hover:bg-black/70 text-white"
+                  }`}
+                  aria-label="Sleep timer"
+                >
+                  <svg className="w-[16px] h-[16px]" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z" />
+                  </svg>
+                  {timeLeft && <span className="text-[13px] font-medium tabular-nums">{timeLeft}m</span>}
+                </button>
+              </Tooltip>
+
+              {timerMenuOpen && (
+                <div className="absolute top-full right-0 mt-[8px] w-[240px] bg-[#1a1a2e] border border-white/10 rounded-[8px] shadow-[0_8px_32px_rgba(0,0,0,0.8)] p-[16px] z-20">
+                  <p className="text-white/60 text-[11px] uppercase tracking-wider mb-[10px]">Stop after</p>
+                  <div className="grid grid-cols-4 gap-[6px] mb-[14px]">
+                    {[5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60].map((min) => (
+                      <button
+                        key={min}
+                        onClick={() => setTimer(min)}
+                        className="h-[32px] rounded-[4px] text-[13px] font-medium bg-white/10 hover:bg-white/20 text-white transition-colors"
+                      >
+                        {min}m
+                      </button>
+                    ))}
+                  </div>
+                  <label className="flex items-center gap-[8px] cursor-pointer mb-[12px]">
+                    <input
+                      type="checkbox"
+                      checked={timerFinishEpisode}
+                      onChange={(e) => setTimerFinishEpisode(e.target.checked)}
+                      className="w-[14px] h-[14px] accent-[#e50914] cursor-pointer"
+                    />
+                    <span className="text-white text-[13px]">Finish current episode</span>
+                  </label>
+                  {timerEnd && (
+                    <button
+                      onClick={cancelTimer}
+                      className="w-full h-[32px] rounded-[4px] text-[13px] font-medium bg-[#e50914]/20 hover:bg-[#e50914]/40 text-[#e50914] transition-colors"
+                    >
+                      Cancel timer
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <Tooltip label="Close" below>
+              <button
+                onClick={handleClose}
+                className="w-[32px] h-[32px] rounded-full bg-black/40 hover:bg-black/70 flex items-center justify-center transition-colors"
+                aria-label="Close"
+              >
+                <svg className="w-[20px] h-[20px] text-white" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </Tooltip>
+          </div>
         </div>
       </div>
 
