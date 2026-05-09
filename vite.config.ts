@@ -7,6 +7,7 @@ import { mediaPlugin } from "./vite-plugin-media";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   return {
+    base: mode === "production" ? "/media/" : "/",
     plugins: [tailwindcss(), react(), mediaPlugin(env.MEDIA_DIR ?? "")],
     test: {
       environment: "jsdom",
