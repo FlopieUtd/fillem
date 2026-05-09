@@ -1,0 +1,394 @@
+import { useState, useRef, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { useLibrary } from "../../context/LibraryContext";
+import { useVideoLoader } from "../../hooks/useVideoLoader";
+import { useServerVideos } from "../../hooks/useServerVideos";
+import { VideoCard } from "../../components/VideoCard/VideoCard";
+import { ShowResumeCard } from "../../components/VideoCard/ShowResumeCard";
+import { VideoPlayer } from "../../components/VideoPlayer/VideoPlayer";
+import { getAllProgress, getProgress } from "../../utils/progress";
+import { generateThumbnail, getCachedThumbnail, setCachedThumbnail, formatTime } from "../../utils/video";
+import type { VideoFile } from "../../types/media";
+import type { ProgressEntry } from "../../utils/progress";
+
+const formatSeason = (s: string) => {
+  const n = s.match(/(\d+)/);
+  return n ? `Season ${parseInt(n[1], 10)}` : s;
+};
+
+export const Library = () => {
+  const { videos, dispatch } = useLibrary();
+  const { loadFromDirectory, loadFromFiles } = useVideoLoader();
+  const { fetchVideos } = useServerVideos();
+  const navigate = useNavigate();
+
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const [progressMap, setProgressMap] = useState<Record<string, ProgressEntry>>(() => getAllProgress());
+  const [heroThumbnail, setHeroThumbnail] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const primeEls = useRef<HTMLVideoElement[]>([]);
+
+  useEffect(() => {
+    if (videos.length === 0) navigate("/");
+  }, [videos.length, navigate]);
+
+  // Group videos by show → season → sorted episodes
+  const grouped = useMemo(() => {
+    const map: Record<string, Record<string, VideoFile[]>> = {};
+    for (const v of videos) {
+      const show = v.show ?? "__unsorted__";
+      const season = v.season ?? "__unsorted__";
+      if (!map[show]) map[show] = {};
+      if (!map[show][season]) map[show][season] = [];
+      map[show][season].push(v);
+    }
+    for (const show of Object.values(map)) {
+      for (const eps of Object.values(show)) {
+        eps.sort((a, b) => (a.episodeNum ?? 0) - (b.episodeNum ?? 0) || a.name.localeCompare(b.name));
+      }
+    }
+    return map;
+  }, [videos]);
+
+  // One entry per show: the most recently watched in-progress episode
+  const continueWatchingByShow = useMemo(() => {
+    const showMap: Record<string, { video: VideoFile; progress: ProgressEntry }> = {};
+    for (const v of videos) {
+      const show = v.show ?? v.displayName;
+      const p = progressMap[v.id];
+      if (!p || !p.duration) continue;
+      const ratio = p.currentTime / p.duration;
+      if (ratio <= 0.02 || ratio >= 0.9) continue;
+      if (!showMap[show] || p.updatedAt > showMap[show].progress.updatedAt) {
+        showMap[show] = { video: v, progress: p };
+      }
+    }
+    return Object.entries(showMap)
+      .sort(([, a], [, b]) => b.progress.updatedAt - a.progress.updatedAt)
+      .map(([show, data]) => ({ show, ...data }));
+  }, [videos, progressMap]);
+
+  // Hero: most recently watched show's current episode, or first video
+  const heroEntry = continueWatchingByShow[0] ?? null;
+  const heroVideo = heroEntry?.video ?? videos[0] ?? null;
+  const heroProgress = heroEntry?.progress ?? null;
+
+  // Generate hero background thumbnail (just one)
+  useEffect(() => {
+    if (!heroVideo) return;
+    const cached = getCachedThumbnail(heroVideo.id);
+    if (cached !== undefined) { setHeroThumbnail(cached); return; }
+    generateThumbnail(heroVideo.objectUrl).then((url) => {
+      setCachedThumbnail(heroVideo.id, url);
+      setHeroThumbnail(url);
+    });
+  }, [heroVideo?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Prime continue-watching videos at their resume positions so playback starts instantly.
+  // Keyed only on video IDs — progress updates must not re-trigger this or they'll spam
+  // cancelled range requests and eventually exhaust the connection pool.
+  const continueWatchingRef = useRef(continueWatchingByShow);
+  continueWatchingRef.current = continueWatchingByShow;
+  const primeKey = continueWatchingByShow.slice(0, 4).map((e) => e.video.id).join("|");
+
+  useEffect(() => {
+    primeEls.current.forEach((el) => { el.src = ""; el.load(); });
+    primeEls.current = [];
+
+    continueWatchingRef.current.slice(0, 4).forEach(({ video, progress }) => {
+      const el = document.createElement("video");
+      el.preload = "metadata";
+      el.muted = true;
+      const t0 = performance.now();
+      console.log("[prime] start —", video.displayName, `@ ${Math.round(progress.currentTime)}s`);
+      el.addEventListener("loadedmetadata", () => { el.currentTime = progress.currentTime; }, { once: true });
+      el.addEventListener("seeked", () => {
+        console.log(`[prime] ready — ${video.displayName} in ${Math.round(performance.now() - t0)}ms`);
+      }, { once: true });
+      el.src = video.objectUrl;
+      primeEls.current.push(el);
+    });
+
+    return () => {
+      primeEls.current.forEach((el) => { el.src = ""; el.load(); });
+      primeEls.current = [];
+    };
+  }, [primeKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleCardClick = (video: VideoFile) => setActiveId(video.id);
+
+  const handlePlayerClose = () => {
+    setActiveId(null);
+    setProgressMap(getAllProgress());
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const vids = await fetchVideos();
+      if (vids.length > 0) dispatch({ type: "SET_VIDEOS", videos: vids });
+    } catch { /* server unavailable */ }
+    finally { setRefreshing(false); }
+  };
+
+  const handleAddFolder = async () => {
+    try {
+      const vids = await loadFromDirectory();
+      if (vids.length > 0) dispatch({ type: "ADD_VIDEOS", videos: vids });
+    } catch (err) {
+      if (err instanceof Error && err.name !== "AbortError") console.error(err.message);
+    }
+  };
+
+  const handleAddFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.length) return;
+    const vids = await loadFromFiles(e.target.files);
+    if (vids.length > 0) dispatch({ type: "ADD_VIDEOS", videos: vids });
+  };
+
+  // Search result: flat filtered list
+  const searchResults = search
+    ? videos.filter((v) => v.displayName.toLowerCase().includes(search.toLowerCase()))
+    : null;
+
+  // For VideoPlayer prev/next, operate on a flat ordered list
+  const flatFiltered = searchResults ?? videos;
+  const activeIndex = activeId ? flatFiltered.findIndex((v) => v.id === activeId) : -1;
+  const activeVideo = activeIndex >= 0 ? flatFiltered[activeIndex] : null;
+
+  if (videos.length === 0) return null;
+
+  return (
+    <div className="min-h-screen bg-[#141414]">
+
+      {/* Fixed transparent header */}
+      <header className="fixed top-0 left-0 right-0 z-20 flex items-center gap-[24px] px-[48px] py-[20px] bg-gradient-to-b from-black/80 to-transparent">
+        <button
+          onClick={() => { dispatch({ type: "CLEAR" }); navigate("/"); }}
+          className="flex items-center gap-[8px] shrink-0"
+        >
+          <svg className="w-[28px] h-[28px] text-[#e50914]" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+          <span className="text-[18px] font-bold text-white tracking-wide">Local Media</span>
+        </button>
+
+        <div className="flex-1 max-w-[360px]">
+          <input
+            type="text"
+            placeholder="Search…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-black/40 border border-white/20 rounded-[4px] px-[12px] py-[6px] text-[14px] text-white placeholder:text-white/40 focus:outline-none focus:border-white/50 backdrop-blur"
+          />
+        </div>
+
+        <div className="flex items-center gap-[8px] ml-auto">
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="px-[12px] py-[6px] rounded-[4px] bg-white/10 hover:bg-white/20 text-[13px] text-white/80 transition-colors disabled:opacity-40"
+          >
+            {refreshing ? "Refreshing…" : "↺ Refresh"}
+          </button>
+          {"showDirectoryPicker" in window && (
+            <button
+              onClick={handleAddFolder}
+              className="px-[12px] py-[6px] rounded-[4px] bg-white/10 hover:bg-white/20 text-[13px] text-white/80 transition-colors"
+            >
+              + Folder
+            </button>
+          )}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="px-[12px] py-[6px] rounded-[4px] bg-white/10 hover:bg-white/20 text-[13px] text-white/80 transition-colors"
+          >
+            + Files
+          </button>
+          <input ref={fileInputRef} type="file" accept="video/*,.mkv" multiple className="hidden" onChange={handleAddFiles} />
+        </div>
+      </header>
+
+      {/* Search results view */}
+      {searchResults ? (
+        <div className="pt-[100px] px-[48px] pb-[48px]">
+          <p className="text-[#888] text-[14px] mb-[24px]">
+            {searchResults.length} result{searchResults.length !== 1 ? "s" : ""} for &ldquo;{search}&rdquo;
+          </p>
+          {searchResults.length === 0 ? (
+            <p className="text-[#555] text-[16px]">Nothing found.</p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-[16px] gap-y-[32px]">
+              {searchResults.map((v) => {
+                const p = getProgress(v.id);
+                return (
+                  <VideoCard
+                    key={v.id}
+                    video={v}
+                    onClick={handleCardClick}
+                    progressRatio={p ? p.currentTime / p.duration : undefined}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* Hero */}
+          {heroVideo && (
+            <div className="relative w-full h-[75vh] min-h-[480px] flex items-end overflow-hidden">
+              {/* Background thumbnail */}
+              {heroThumbnail ? (
+                <img
+                  src={heroThumbnail}
+                  className="absolute inset-0 w-full h-full object-cover scale-[1.05]"
+                  style={{ filter: "blur(2px)" }}
+                  alt=""
+                />
+              ) : (
+                <div className="absolute inset-0 bg-gradient-to-br from-[#1a1a2e] to-[#0f0f1a]" />
+              )}
+
+              {/* Overlays */}
+              <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/60 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-r from-[#141414]/80 via-transparent to-transparent" />
+
+              {/* Content */}
+              <div className="relative z-10 px-[48px] pb-[48px] max-w-[600px]">
+                {heroVideo.show && (
+                  <p className="text-[13px] font-semibold uppercase tracking-[2px] text-[#e50914] mb-[12px]">
+                    {heroVideo.show}
+                  </p>
+                )}
+                <h1 className="text-[48px] font-bold text-white leading-tight mb-[8px] drop-shadow-lg">
+                  {heroVideo.show ?? heroVideo.displayName}
+                </h1>
+                {heroVideo.season && (
+                  <p className="text-[16px] text-white/70 mb-[6px]">
+                    {formatSeason(heroVideo.season)}
+                    {heroVideo.episodeNum !== undefined && ` · Episode ${heroVideo.episodeNum}`}
+                  </p>
+                )}
+                <p className="text-[18px] text-white/90 font-medium mb-[24px]">
+                  {heroVideo.displayName}
+                </p>
+
+                {heroProgress && (
+                  <div className="mb-[20px]">
+                    <div className="flex items-center gap-[8px] mb-[8px]">
+                      <span className="text-[13px] text-white/50">
+                        {formatTime(heroProgress.currentTime)} of {formatTime(heroProgress.duration)}
+                      </span>
+                    </div>
+                    <div className="w-[200px] h-[3px] bg-white/20 rounded-full">
+                      <div
+                        className="h-full bg-[#e50914] rounded-full"
+                        style={{ width: `${(heroProgress.currentTime / heroProgress.duration) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-[12px]">
+                  <button
+                    onClick={() => handleCardClick(heroVideo)}
+                    className="flex items-center gap-[10px] px-[28px] py-[12px] rounded-[4px] bg-white hover:bg-white/90 text-black text-[16px] font-bold transition-colors"
+                  >
+                    <svg className="w-[20px] h-[20px] ml-[-2px]" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                    {heroProgress ? "Resume" : "Play"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Content rows */}
+          <div className="pb-[48px] space-y-[40px]">
+
+            {/* Continue Watching row — one card per show */}
+            {continueWatchingByShow.length > 0 && (
+              <ContentRow title="Continue Watching">
+                {continueWatchingByShow.map(({ show, video, progress }) => (
+                  <CardSlot key={show}>
+                    <ShowResumeCard
+                      show={show}
+                      video={video}
+                      progress={progress}
+                      onClick={() => handleCardClick(video)}
+                    />
+                  </CardSlot>
+                ))}
+              </ContentRow>
+            )}
+
+            {/* Per-show, per-season rows */}
+            {Object.entries(grouped).map(([show, seasons]) =>
+              Object.entries(seasons).map(([season, episodes]) => {
+                const title = show === "__unsorted__"
+                  ? "Videos"
+                  : season === "__unsorted__"
+                  ? show
+                  : `${show} · ${formatSeason(season)}`;
+                const subtitle = `${episodes.length} episode${episodes.length !== 1 ? "s" : ""}`;
+                return (
+                  <ContentRow key={`${show}-${season}`} title={title} subtitle={subtitle}>
+                    {episodes.map((v) => {
+                      const p = progressMap[v.id];
+                      return (
+                        <CardSlot key={v.id}>
+                          <VideoCard
+                            video={v}
+                            onClick={handleCardClick}
+                            progressRatio={p ? p.currentTime / p.duration : undefined}
+                          />
+                        </CardSlot>
+                      );
+                    })}
+                  </ContentRow>
+                );
+              })
+            )}
+          </div>
+        </>
+      )}
+
+      {activeVideo && (
+        <VideoPlayer
+          video={activeVideo}
+          onClose={handlePlayerClose}
+          onPrev={activeIndex > 0 ? () => setActiveId(flatFiltered[activeIndex - 1].id) : null}
+          onNext={activeIndex < flatFiltered.length - 1 ? () => setActiveId(flatFiltered[activeIndex + 1].id) : null}
+        />
+      )}
+    </div>
+  );
+};
+
+// ─── Small layout helpers ────────────────────────────────────────────────────
+
+interface ContentRowProps {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}
+
+const ContentRow = ({ title, subtitle, children }: ContentRowProps) => (
+  <section className="px-[48px]">
+    <div className="flex items-baseline gap-[12px] mb-[16px]">
+      <h2 className="text-white text-[20px] font-semibold">{title}</h2>
+      {subtitle && <span className="text-[#666] text-[13px]">{subtitle}</span>}
+    </div>
+    <div className="flex gap-[12px] overflow-x-auto pb-[8px] scrollbar-none">
+      {children}
+    </div>
+  </section>
+);
+
+const CardSlot = ({ children }: { children: React.ReactNode }) => (
+  <div className="shrink-0 w-[200px]">{children}</div>
+);
