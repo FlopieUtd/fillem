@@ -4,16 +4,13 @@ import { useLibrary } from "../../context/LibraryContext";
 import { useVideoLoader } from "../../hooks/useVideoLoader";
 import { VideoCard } from "../../components/VideoCard/VideoCard";
 import { ShowResumeCard } from "../../components/VideoCard/ShowResumeCard";
+import { ShowCard } from "../../components/ShowCard";
+import { ShowDetail } from "../../components/ShowDetail";
 import { VideoPlayer } from "../../components/VideoPlayer/VideoPlayer";
 import { getAllProgress, getProgress } from "../../utils/progress";
 import { generateThumbnail, getCachedThumbnail, setCachedThumbnail, formatTime } from "../../utils/video";
 import type { VideoFile } from "../../types/media";
 import type { ProgressEntry } from "../../utils/progress";
-
-const formatSeason = (s: string) => {
-  const n = s.match(/(\d+)/);
-  return n ? `Season ${parseInt(n[1], 10)}` : s;
-};
 
 export const Library = () => {
   const { videos, dispatch } = useLibrary();
@@ -21,6 +18,7 @@ export const Library = () => {
   const navigate = useNavigate();
 
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeShow, setActiveShow] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [progressMap, setProgressMap] = useState<Record<string, ProgressEntry>>(() => getAllProgress());
   const [heroThumbnail, setHeroThumbnail] = useState<string | null>(null);
@@ -48,6 +46,23 @@ export const Library = () => {
     }
     return map;
   }, [videos]);
+
+  const showEntries = useMemo(
+    () =>
+      Object.entries(grouped)
+        .filter(([show]) => show !== "__unsorted__")
+        .map(([show, seasons]) => {
+          const allEps = Object.values(seasons).flat();
+          const resumeEntry = continueWatchingByShow.find((e) => e.show === show);
+          return { show, seasons, heroVideo: resumeEntry?.video ?? allEps[0], episodeCount: allEps.length };
+        }),
+    [grouped, continueWatchingByShow]
+  );
+
+  const unsortedEpisodes = useMemo(
+    () => Object.values(grouped["__unsorted__"] ?? {}).flat(),
+    [grouped]
+  );
 
   // One entry per show: the most recently watched in-progress episode
   const continueWatchingByShow = useMemo(() => {
@@ -307,35 +322,56 @@ export const Library = () => {
               </ContentRow>
             )}
 
-            {/* Per-show, per-season rows */}
-            {Object.entries(grouped).map(([show, seasons]) =>
-              Object.entries(seasons).map(([season, episodes]) => {
-                const title = show === "__unsorted__"
-                  ? "Videos"
-                  : season === "__unsorted__"
-                  ? show
-                  : `${show} · ${formatSeason(season)}`;
-                const subtitle = `${episodes.length} episode${episodes.length !== 1 ? "s" : ""}`;
-                return (
-                  <ContentRow key={`${show}-${season}`} title={title} subtitle={subtitle}>
-                    {episodes.map((v) => {
-                      const p = progressMap[v.id];
-                      return (
-                        <CardSlot key={v.id}>
-                          <VideoCard
-                            video={v}
-                            onClick={handleCardClick}
-                            progressRatio={p ? p.currentTime / p.duration : undefined}
-                          />
-                        </CardSlot>
-                      );
-                    })}
-                  </ContentRow>
-                );
-              })
+            {/* Shows grid — one card per series */}
+            {showEntries.length > 0 && (
+              <section className="px-[48px]">
+                <h2 className="text-white text-[20px] font-semibold mb-[16px]">Shows</h2>
+                <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-[16px] gap-y-[28px]">
+                  {showEntries.map(({ show, heroVideo, episodeCount }) => (
+                    <ShowCard
+                      key={show}
+                      show={show}
+                      heroVideo={heroVideo}
+                      episodeCount={episodeCount}
+                      onClick={() => setActiveShow(show)}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Unsorted / individual videos */}
+            {unsortedEpisodes.length > 0 && (
+              <ContentRow
+                title="Videos"
+                subtitle={`${unsortedEpisodes.length} video${unsortedEpisodes.length !== 1 ? "s" : ""}`}
+              >
+                {unsortedEpisodes.map((v) => {
+                  const p = progressMap[v.id];
+                  return (
+                    <CardSlot key={v.id}>
+                      <VideoCard
+                        video={v}
+                        onClick={handleCardClick}
+                        progressRatio={p ? p.currentTime / p.duration : undefined}
+                      />
+                    </CardSlot>
+                  );
+                })}
+              </ContentRow>
             )}
           </div>
         </>
+      )}
+
+      {activeShow && (
+        <ShowDetail
+          show={activeShow}
+          seasons={grouped[activeShow] ?? {}}
+          progressMap={progressMap}
+          onPlay={(v) => { setActiveShow(null); handleCardClick(v); }}
+          onClose={() => setActiveShow(null)}
+        />
       )}
 
       {activeVideo && (
