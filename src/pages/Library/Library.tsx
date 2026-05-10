@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLibrary } from "../../context/LibraryContext";
 import { useVideoLoader } from "../../hooks/useVideoLoader";
-import { useServerVideos } from "../../hooks/useServerVideos";
 import { VideoCard } from "../../components/VideoCard/VideoCard";
 import { ShowResumeCard } from "../../components/VideoCard/ShowResumeCard";
 import { VideoPlayer } from "../../components/VideoPlayer/VideoPlayer";
@@ -19,12 +18,10 @@ const formatSeason = (s: string) => {
 export const Library = () => {
   const { videos, dispatch } = useLibrary();
   const { loadFromDirectory, loadFromFiles } = useVideoLoader();
-  const { fetchVideos } = useServerVideos();
   const navigate = useNavigate();
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [refreshing, setRefreshing] = useState(false);
   const [progressMap, setProgressMap] = useState<Record<string, ProgressEntry>>(() => getAllProgress());
   const [heroThumbnail, setHeroThumbnail] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -124,15 +121,6 @@ export const Library = () => {
     setProgressMap(getAllProgress());
   };
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      const vids = await fetchVideos();
-      if (vids.length > 0) dispatch({ type: "SET_VIDEOS", videos: vids });
-    } catch { /* server unavailable */ }
-    finally { setRefreshing(false); }
-  };
-
   const handleAddFolder = async () => {
     try {
       const vids = await loadFromDirectory();
@@ -186,13 +174,6 @@ export const Library = () => {
         </div>
 
         <div className="flex items-center gap-[8px] ml-auto">
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="px-[12px] py-[6px] rounded-[4px] bg-white/10 hover:bg-white/20 text-[13px] text-white/80 transition-colors disabled:opacity-40"
-          >
-            {refreshing ? "Refreshing…" : "↺ Refresh"}
-          </button>
           {"showDirectoryPicker" in window && (
             <button
               onClick={handleAddFolder}
