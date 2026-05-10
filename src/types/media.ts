@@ -3,6 +3,7 @@ export interface VideoFile {
   name: string;
   displayName: string;
   objectUrl: string;
+  subtitleUrl?: string;
   duration: number | null;
   size: number;
   show?: string;

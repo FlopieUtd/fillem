@@ -2,8 +2,10 @@ import { useCallback } from "react";
 import type { VideoFile } from "../types/media";
 import { formatDisplayName } from "../utils/video";
 import { saveHandle } from "../utils/dirHandle";
+import { srtToVtt } from "../utils/subtitle";
 
 const VIDEO_EXTS = /\.(mp4|mkv|webm|mov|avi|m4v)$/i;
+const SUBTITLE_EXTS = /\.(srt|vtt)$/i;
 
 const parseEpisodeName = (filename: string): string => {
   const match = filename.match(/S\d+E(\d+)[_\s-]+(.+?)(\.\w+)?$/i);
@@ -18,35 +20,63 @@ const scanDir = async (
   videos: VideoFile[],
   pathParts: string[] = []
 ): Promise<void> => {
+  const videoEntries: { handle: FileSystemFileHandle; name: string }[] = [];
+  const subEntries: { handle: FileSystemFileHandle; stem: string }[] = [];
+
   for await (const entry of dirHandle.values()) {
     if (entry.kind === "directory") {
-      await scanDir(
-        entry as FileSystemDirectoryHandle,
-        videos,
-        [...pathParts, entry.name]
-      );
-    } else if (entry.kind === "file" && VIDEO_EXTS.test(entry.name)) {
-      const file = await (entry as FileSystemFileHandle).getFile();
-      const objectUrl = URL.createObjectURL(file);
-
-      const show = pathParts.length >= 2 ? pathParts[0] : undefined;
-      const season = pathParts.length >= 2 ? pathParts[1] : undefined;
-      const episodeMatch = entry.name.match(/E(\d+)/i);
-      const episodeNum = episodeMatch ? parseInt(episodeMatch[1], 10) : undefined;
-      const displayName = show ? parseEpisodeName(entry.name) : formatDisplayName(entry.name);
-
-      videos.push({
-        id: `${[...pathParts, entry.name].join("/")}`,
-        name: entry.name,
-        displayName,
-        objectUrl,
-        duration: null,
-        size: file.size,
-        show,
-        season,
-        episodeNum,
-      });
+      await scanDir(entry as FileSystemDirectoryHandle, videos, [...pathParts, entry.name]);
+    } else if (entry.kind === "file") {
+      if (VIDEO_EXTS.test(entry.name)) {
+        videoEntries.push({ handle: entry as FileSystemFileHandle, name: entry.name });
+      } else if (SUBTITLE_EXTS.test(entry.name)) {
+        subEntries.push({
+          handle: entry as FileSystemFileHandle,
+          stem: entry.name.replace(SUBTITLE_EXTS, ""),
+        });
+      }
     }
+  }
+
+  for (const { handle, name } of videoEntries) {
+    const file = await handle.getFile();
+    const objectUrl = URL.createObjectURL(file);
+    const videoStem = name.replace(VIDEO_EXTS, "");
+
+    // Match subtitle: exact stem or stem + language suffix (e.g. "Ep1.en")
+    const sub = subEntries.find(
+      (s) => s.stem === videoStem || s.stem.startsWith(videoStem + ".")
+    );
+
+    let subtitleUrl: string | undefined;
+    if (sub) {
+      const subFile = await sub.handle.getFile();
+      if (sub.handle.name.endsWith(".srt")) {
+        const vtt = srtToVtt(await subFile.text());
+        subtitleUrl = URL.createObjectURL(new Blob([vtt], { type: "text/vtt" }));
+      } else {
+        subtitleUrl = URL.createObjectURL(subFile);
+      }
+    }
+
+    const show = pathParts.length >= 2 ? pathParts[0] : undefined;
+    const season = pathParts.length >= 2 ? pathParts[1] : undefined;
+    const episodeMatch = name.match(/E(\d+)/i);
+    const episodeNum = episodeMatch ? parseInt(episodeMatch[1], 10) : undefined;
+    const displayName = show ? parseEpisodeName(name) : formatDisplayName(name);
+
+    videos.push({
+      id: `${[...pathParts, name].join("/")}`,
+      name,
+      displayName,
+      objectUrl,
+      subtitleUrl,
+      duration: null,
+      size: file.size,
+      show,
+      season,
+      episodeNum,
+    });
   }
 };
 

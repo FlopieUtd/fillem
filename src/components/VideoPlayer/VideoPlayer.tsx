@@ -110,6 +110,7 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const timerFiredRef = useRef(false);
   const timerButtonRef = useRef<HTMLDivElement>(null);
+  const [subtitlesOn, setSubtitlesOn] = useState(true);
 
   // Enter fullscreen on mount
   useEffect(() => {
@@ -168,6 +169,17 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
   useEffect(() => {
     if (videoRef.current) videoRef.current.muted = muted;
   }, [muted]);
+
+  // Sync subtitle track visibility
+  useEffect(() => {
+    const track = videoRef.current?.textTracks[0];
+    if (track) track.mode = subtitlesOn ? "showing" : "hidden";
+  }, [subtitlesOn, video.id]);
+
+  // Reset subtitle toggle on video change
+  useEffect(() => {
+    setSubtitlesOn(true);
+  }, [video.id]);
 
   // Sleep timer — check every 10s
   useEffect(() => {
@@ -364,7 +376,11 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
           setVolume(videoRef.current?.volume ?? 1);
           setMuted(videoRef.current?.muted ?? false);
         }}
-      />
+      >
+        {video.subtitleUrl && (
+          <track key={video.id} kind="subtitles" src={video.subtitleUrl} default />
+        )}
+      </video>
 
       {/* Loading spinner — hidden while a seek/play/pause flash is showing */}
       {loading && !flash && (
@@ -572,6 +588,20 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
               />
             </div>
           </div>
+
+          {video.subtitleUrl && (
+            <Tooltip label={subtitlesOn ? "Hide subtitles" : "Show subtitles"}>
+              <button
+                onClick={() => setSubtitlesOn((s) => !s)}
+                className={`transition-colors ${subtitlesOn ? "text-white" : "text-white/30"}`}
+                aria-label="Toggle subtitles"
+              >
+                <svg className="w-[28px] h-[28px]" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-9 8H9.5v-.5h-2v3h2V14H11v1c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1zm7 0h-1.5v-.5h-2v3h2V14H18v1c0 .55-.45 1-1 1h-3c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1z" />
+                </svg>
+              </button>
+            </Tooltip>
+          )}
 
           <Tooltip label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
             <button onClick={toggleFullscreen} className="text-white hover:text-white/80 transition-colors">
