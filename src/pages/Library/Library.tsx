@@ -47,23 +47,6 @@ export const Library = () => {
     return map;
   }, [videos]);
 
-  const showEntries = useMemo(
-    () =>
-      Object.entries(grouped)
-        .filter(([show]) => show !== "__unsorted__")
-        .map(([show, seasons]) => {
-          const allEps = Object.values(seasons).flat();
-          const resumeEntry = continueWatchingByShow.find((e) => e.show === show);
-          return { show, seasons, heroVideo: resumeEntry?.video ?? allEps[0], episodeCount: allEps.length };
-        }),
-    [grouped, continueWatchingByShow]
-  );
-
-  const unsortedEpisodes = useMemo(
-    () => Object.values(grouped["__unsorted__"] ?? {}).flat(),
-    [grouped]
-  );
-
   // One entry per show: the most recently watched in-progress episode
   const continueWatchingByShow = useMemo(() => {
     const showMap: Record<string, { video: VideoFile; progress: ProgressEntry }> = {};
@@ -81,6 +64,23 @@ export const Library = () => {
       .sort(([, a], [, b]) => b.progress.updatedAt - a.progress.updatedAt)
       .map(([show, data]) => ({ show, ...data }));
   }, [videos, progressMap]);
+
+  const showEntries = useMemo(
+    () =>
+      Object.entries(grouped)
+        .filter(([show]) => show !== "__unsorted__")
+        .map(([show, seasons]) => {
+          const allEps = Object.values(seasons).flat();
+          const resumeEntry = continueWatchingByShow.find((e) => e.show === show);
+          return { show, seasons, heroVideo: resumeEntry?.video ?? allEps[0], episodeCount: allEps.length };
+        }),
+    [grouped, continueWatchingByShow]
+  );
+
+  const unsortedEpisodes = useMemo(
+    () => Object.values(grouped["__unsorted__"] ?? {}).flat(),
+    [grouped]
+  );
 
   // Hero: most recently watched show's current episode, or first video
   const heroEntry = continueWatchingByShow[0] ?? null;
