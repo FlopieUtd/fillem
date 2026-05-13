@@ -6,6 +6,7 @@ interface Props {
   video: VideoFile;
   onClick: (video: VideoFile) => void;
   progressRatio?: number;
+  label?: string;
 }
 
 const formatSize = (bytes: number) => {
@@ -14,7 +15,7 @@ const formatSize = (bytes: number) => {
   return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
 };
 
-export const VideoCard = ({ video, onClick, progressRatio }: Props) => {
+export const VideoCard = ({ video, onClick, progressRatio, label }: Props) => {
   const [hovered, setHovered] = useState(false);
   const [thumbnail, setThumbnail] = useState<string | null>(() => {
     const cached = getCachedThumbnail(video.id);
@@ -98,7 +99,7 @@ export const VideoCard = ({ video, onClick, progressRatio }: Props) => {
           hovered ? "text-white" : "text-[#b3b3b3]"
         }`}
       >
-        {video.displayName}
+        {label ?? video.displayName}
       </p>
     </button>
   );

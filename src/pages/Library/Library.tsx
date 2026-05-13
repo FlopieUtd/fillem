@@ -72,7 +72,8 @@ export const Library = () => {
         .map(([show, seasons]) => {
           const allEps = Object.values(seasons).flat();
           const resumeEntry = continueWatchingByShow.find((e) => e.show === show);
-          return { show, seasons, heroVideo: resumeEntry?.video ?? allEps[0], episodeCount: allEps.length };
+          const seasonCount = Object.keys(seasons).filter((s) => s !== "__unsorted__").length;
+          return { show, seasons, heroVideo: resumeEntry?.video ?? allEps[0], episodeCount: allEps.length, seasonCount };
         }),
     [grouped, continueWatchingByShow]
   );
@@ -254,17 +255,12 @@ export const Library = () => {
 
               {/* Content */}
               <div className="relative z-10 px-[48px] pb-[48px] max-w-[600px]">
-                {heroVideo.show && (
-                  <p className="text-[13px] font-semibold uppercase tracking-[2px] text-[#e50914] mb-[12px]">
-                    {heroVideo.show}
-                  </p>
-                )}
                 <h1 className="text-[48px] font-bold text-white leading-tight mb-[8px] drop-shadow-lg">
                   {heroVideo.show ?? heroVideo.displayName}
                 </h1>
                 {heroVideo.season && (
                   <p className="text-[16px] text-white/70 mb-[6px]">
-                    {formatSeason(heroVideo.season)}
+                    {heroVideo.season.replace(/^.*?(\d+).*$/, "Season $1")}
                     {heroVideo.episodeNum !== undefined && ` · Episode ${heroVideo.episodeNum}`}
                   </p>
                 )}
@@ -322,22 +318,21 @@ export const Library = () => {
               </ContentRow>
             )}
 
-            {/* Shows grid — one card per series */}
+            {/* Shows row — one card per series */}
             {showEntries.length > 0 && (
-              <section className="px-[48px]">
-                <h2 className="text-white text-[20px] font-semibold mb-[16px]">Shows</h2>
-                <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-[16px] gap-y-[28px]">
-                  {showEntries.map(({ show, heroVideo, episodeCount }) => (
+              <ContentRow title="Shows">
+                {showEntries.map(({ show, heroVideo, seasonCount, episodeCount }) => (
+                  <CardSlot key={show}>
                     <ShowCard
-                      key={show}
                       show={show}
                       heroVideo={heroVideo}
+                      seasonCount={seasonCount}
                       episodeCount={episodeCount}
                       onClick={() => setActiveShow(show)}
                     />
-                  ))}
-                </div>
-              </section>
+                  </CardSlot>
+                ))}
+              </ContentRow>
             )}
 
             {/* Unsorted / individual videos */}

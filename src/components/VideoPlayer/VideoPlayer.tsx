@@ -109,6 +109,7 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
   const [timerMenuOpen, setTimerMenuOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const timerFiredRef = useRef(false);
+  const autoAdvancedRef = useRef(false);
   const timerButtonRef = useRef<HTMLDivElement>(null);
   const [subtitlesOn, setSubtitlesOn] = useState(true);
 
@@ -150,7 +151,9 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
     if (!el) return;
     el.muted = muted;
     const saved = getProgress(video.id);
-    const resume = saved && saved.duration > 0 && saved.currentTime / saved.duration < 0.9;
+    const skipResume = autoAdvancedRef.current;
+    autoAdvancedRef.current = false;
+    const resume = !skipResume && saved && saved.duration > 0 && saved.currentTime / saved.duration < 0.9;
     const onReady = () => {
       if (resume) el.currentTime = saved.currentTime;
       el.play().catch(() => {});
@@ -369,6 +372,7 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
             timerFiredRef.current = false;
             handleClose();
           } else {
+            autoAdvancedRef.current = true;
             onNext?.();
           }
         }}

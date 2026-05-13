@@ -5,11 +5,12 @@ import { generateThumbnail, getCachedThumbnail, setCachedThumbnail } from "../ut
 interface Props {
   show: string;
   heroVideo: VideoFile;
+  seasonCount: number;
   episodeCount: number;
   onClick: () => void;
 }
 
-export const ShowCard = ({ show, heroVideo, episodeCount, onClick }: Props) => {
+export const ShowCard = ({ show, heroVideo, seasonCount, episodeCount, onClick }: Props) => {
   const [hovered, setHovered] = useState(false);
   const [thumbnail, setThumbnail] = useState<string | null>(() => {
     const cached = getCachedThumbnail(heroVideo.id);
@@ -86,7 +87,7 @@ export const ShowCard = ({ show, heroVideo, episodeCount, onClick }: Props) => {
         {show}
       </p>
       <p className="text-[12px] text-[#555]">
-        {episodeCount} episode{episodeCount !== 1 ? "s" : ""}
+        {seasonCount > 1 ? `${seasonCount} seasons · ` : ""}{episodeCount} episode{episodeCount !== 1 ? "s" : ""}
       </p>
     </button>
   );

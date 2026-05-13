@@ -74,17 +74,19 @@ export const ShowDetail = ({ show, seasons, progressMap, onPlay, onClose }: Prop
         )}
 
         {/* Episodes */}
-        <div className="overflow-y-auto flex-1 px-[48px] py-[24px]">
-          <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-[16px] gap-y-[28px]">
+        <div className="overflow-x-auto flex-1 px-[48px] py-[24px] scrollbar-none">
+          <div className="flex gap-[12px]">
             {episodes.map((v) => {
               const p = progressMap[v.id];
               return (
-                <VideoCard
-                  key={v.id}
-                  video={v}
-                  onClick={onPlay}
-                  progressRatio={p ? p.currentTime / p.duration : undefined}
-                />
+                <div key={v.id} className="shrink-0 w-[200px]">
+                  <VideoCard
+                    video={v}
+                    onClick={onPlay}
+                    progressRatio={p ? p.currentTime / p.duration : undefined}
+                    label={v.displayName.replace(/^E(\d+)/, (_, n) => String(parseInt(n, 10)))}
+                  />
+                </div>
               );
             })}
           </div>
