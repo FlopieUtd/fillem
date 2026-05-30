@@ -109,7 +109,9 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
   const [timerMenuOpen, setTimerMenuOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const timerFiredRef = useRef(false);
-  const autoAdvancedRef = useRef(false);
+  // Resume from saved progress only on the very first video opened (from the
+  // overview). Any in-player navigation (prev/next/auto-advance) starts at 0:00.
+  const firstLoadRef = useRef(true);
   const timerButtonRef = useRef<HTMLDivElement>(null);
   const [subtitlesOn, setSubtitlesOn] = useState(true);
 
@@ -151,9 +153,9 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
     if (!el) return;
     el.muted = muted;
     const saved = getProgress(video.id);
-    const skipResume = autoAdvancedRef.current;
-    autoAdvancedRef.current = false;
-    const resume = !skipResume && saved && saved.duration > 0 && saved.currentTime / saved.duration < 0.9;
+    const allowResume = firstLoadRef.current;
+    firstLoadRef.current = false;
+    const resume = allowResume && saved && saved.duration > 0 && saved.currentTime / saved.duration < 0.9;
     const onReady = () => {
       if (resume) el.currentTime = saved.currentTime;
       el.play().catch(() => {});
@@ -293,6 +295,19 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
     document.exitFullscreen().catch(() => {});
   };
 
+  // Standard "previous" behavior: restart the current episode if we're past the
+  // first few seconds, otherwise jump to the previous episode.
+  const PREV_RESTART_THRESHOLD = 5;
+  const handlePrev = () => {
+    const el = videoRef.current;
+    if (el && el.currentTime > PREV_RESTART_THRESHOLD) {
+      el.currentTime = 0;
+      el.play().catch(() => {});
+      return;
+    }
+    onPrev?.();
+  };
+
   const seek = (delta: number) => {
     if (videoRef.current) videoRef.current.currentTime += delta;
     setFlash({ type: delta < 0 ? "back" : "forward", key: ++flashCounter.current });
@@ -372,7 +387,6 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
             timerFiredRef.current = false;
             handleClose();
           } else {
-            autoAdvancedRef.current = true;
             onNext?.();
           }
         }}
@@ -547,13 +561,11 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
             </button>
           </Tooltip>
 
-          {onPrev && (
-            <Tooltip label="Previous">
-              <button onClick={onPrev} className="text-white hover:text-white/80 transition-colors" aria-label="Previous">
-                <IconSkipPrev />
-              </button>
-            </Tooltip>
-          )}
+          <Tooltip label="Previous">
+            <button onClick={handlePrev} className="text-white hover:text-white/80 transition-colors" aria-label="Previous">
+              <IconSkipPrev />
+            </button>
+          </Tooltip>
           {onNext && (
             <Tooltip label="Next episode">
               <button onClick={onNext} className="text-white hover:text-white/80 transition-colors" aria-label="Next">
