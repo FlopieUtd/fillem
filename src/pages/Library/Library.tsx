@@ -157,10 +157,25 @@ export const Library = () => {
     ? videos.filter((v) => v.displayName.toLowerCase().includes(search.toLowerCase()))
     : null;
 
-  // For VideoPlayer prev/next, operate on a flat ordered list
-  const flatFiltered = searchResults ?? videos;
-  const activeIndex = activeId ? flatFiltered.findIndex((v) => v.id === activeId) : -1;
-  const activeVideo = activeIndex >= 0 ? flatFiltered[activeIndex] : null;
+  const activeVideo = activeId ? videos.find((v) => v.id === activeId) ?? null : null;
+
+  // Prev/next are siloed to the active video's series — navigation never crosses
+  // into another show. Episodes are ordered by season, then by episode within it.
+  const seriesEpisodes = useMemo(() => {
+    if (!activeVideo) return [];
+    const seasons = grouped[activeVideo.show ?? "__unsorted__"];
+    if (!seasons) return [activeVideo];
+    const seasonKeys = Object.keys(seasons).sort((a, b) => {
+      if (a === "__unsorted__") return 1;
+      if (b === "__unsorted__") return -1;
+      const na = parseInt(a.match(/(\d+)/)?.[1] ?? "0", 10);
+      const nb = parseInt(b.match(/(\d+)/)?.[1] ?? "0", 10);
+      return na - nb;
+    });
+    return seasonKeys.flatMap((s) => seasons[s]);
+  }, [activeVideo, grouped]);
+
+  const activeIndex = activeVideo ? seriesEpisodes.findIndex((v) => v.id === activeVideo.id) : -1;
 
   if (videos.length === 0) return null;
 
@@ -373,8 +388,8 @@ export const Library = () => {
         <VideoPlayer
           video={activeVideo}
           onClose={handlePlayerClose}
-          onPrev={activeIndex > 0 ? () => setActiveId(flatFiltered[activeIndex - 1].id) : null}
-          onNext={activeIndex < flatFiltered.length - 1 ? () => setActiveId(flatFiltered[activeIndex + 1].id) : null}
+          onPrev={activeIndex > 0 ? () => setActiveId(seriesEpisodes[activeIndex - 1].id) : null}
+          onNext={activeIndex < seriesEpisodes.length - 1 ? () => setActiveId(seriesEpisodes[activeIndex + 1].id) : null}
         />
       )}
     </div>

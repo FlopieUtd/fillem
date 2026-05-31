@@ -92,7 +92,9 @@ export const ShowResumeCard = ({ show, video, progress, onClick }: Props) => {
       <p className={`mt-[8px] text-[14px] font-semibold leading-snug truncate transition-colors duration-150 ${hovered ? "text-white" : "text-[#ddd]"}`}>
         {show}
       </p>
-      <p className="text-[12px] text-[#666] truncate mt-[2px]">{video.displayName}</p>
+      <p className="text-[12px] text-[#666] truncate mt-[2px]">
+        {video.season ? `${video.season} · ${video.displayName}` : video.displayName}
+      </p>
     </button>
   );
 };
