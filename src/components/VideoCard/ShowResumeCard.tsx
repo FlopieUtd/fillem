@@ -14,6 +14,7 @@ interface Props {
 export const ShowResumeCard = ({ show, video, progress, onClick }: Props) => {
   const [hovered, setHovered] = useState(false);
   const [thumbnail, setThumbnail] = useState<string | null>(() => {
+    if (video.posterUrl) return video.posterUrl;
     const cached = getCachedThumbnail(video.id);
     return cached !== undefined ? cached : null;
   });
@@ -21,6 +22,7 @@ export const ShowResumeCard = ({ show, video, progress, onClick }: Props) => {
   const generating = useRef(false);
 
   useEffect(() => {
+    if (video.posterUrl) return; // series poster wins — skip frame generation
     if (getCachedThumbnail(video.id) !== undefined) return;
     if (generating.current) return;
 
@@ -40,7 +42,7 @@ export const ShowResumeCard = ({ show, video, progress, onClick }: Props) => {
 
     if (cardRef.current) observer.observe(cardRef.current);
     return () => observer.disconnect();
-  }, [video.id, video.objectUrl]);
+  }, [video.id, video.objectUrl, video.posterUrl]);
 
   const progressRatio = progress.duration ? progress.currentTime / progress.duration : 0;
 

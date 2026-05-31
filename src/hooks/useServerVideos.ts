@@ -15,9 +15,10 @@ export const useServerVideos = () => {
   const fetchVideos = useCallback(async (): Promise<VideoFile[]> => {
     const res = await fetch("/api/videos");
     if (!res.ok) throw new Error("Server unavailable");
-    const list: Array<{ name: string; relativePath: string; size: number }> = await res.json();
+    const list: Array<{ name: string; relativePath: string; size: number; thumb?: string }> =
+      await res.json();
 
-    return list.map(({ name, relativePath, size }) => {
+    return list.map(({ name, relativePath, size, thumb }) => {
       const urlPath = relativePath.split("/").map(encodeURIComponent).join("/");
       const parts = relativePath.split("/");
 
@@ -35,6 +36,9 @@ export const useServerVideos = () => {
         name,
         displayName,
         objectUrl: `/videos/${urlPath}`,
+        posterUrl: thumb
+          ? `/videos/${thumb.split("/").map(encodeURIComponent).join("/")}`
+          : undefined,
         duration: null,
         size,
         show,

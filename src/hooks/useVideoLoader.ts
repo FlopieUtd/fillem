@@ -6,6 +6,7 @@ import { srtToVtt } from "../utils/subtitle";
 
 const VIDEO_EXTS = /\.(mp4|mkv|webm|mov|avi|m4v)$/i;
 const SUBTITLE_EXTS = /\.(srt|vtt)$/i;
+const THUMB = /^thumb\.(jpe?g|png|webp)$/i;
 
 const parseEpisodeName = (filename: string): string => {
   const match = filename.match(/S\d+E(\d+)[_\s-]+(.+?)(\.\w+)?$/i);
@@ -18,6 +19,7 @@ const parseEpisodeName = (filename: string): string => {
 const scanDir = async (
   dirHandle: FileSystemDirectoryHandle,
   videos: VideoFile[],
+  thumbs: Record<string, string>,
   pathParts: string[] = []
 ): Promise<void> => {
   const videoEntries: { handle: FileSystemFileHandle; name: string }[] = [];
@@ -25,7 +27,7 @@ const scanDir = async (
 
   for await (const entry of dirHandle.values()) {
     if (entry.kind === "directory") {
-      await scanDir(entry as FileSystemDirectoryHandle, videos, [...pathParts, entry.name]);
+      await scanDir(entry as FileSystemDirectoryHandle, videos, thumbs, [...pathParts, entry.name]);
     } else if (entry.kind === "file") {
       if (VIDEO_EXTS.test(entry.name)) {
         videoEntries.push({ handle: entry as FileSystemFileHandle, name: entry.name });
@@ -34,6 +36,13 @@ const scanDir = async (
           handle: entry as FileSystemFileHandle,
           stem: entry.name.replace(SUBTITLE_EXTS, ""),
         });
+      } else if (THUMB.test(entry.name) && pathParts.length >= 1) {
+        // A thumb belongs to the series at the top of its path
+        const showRoot = pathParts[0];
+        if (!thumbs[showRoot]) {
+          const file = await (entry as FileSystemFileHandle).getFile();
+          thumbs[showRoot] = URL.createObjectURL(file);
+        }
       }
     }
   }
@@ -84,7 +93,13 @@ export const loadVideosFromHandle = async (
   dirHandle: FileSystemDirectoryHandle
 ): Promise<VideoFile[]> => {
   const videos: VideoFile[] = [];
-  await scanDir(dirHandle, videos);
+  const thumbs: Record<string, string> = {};
+  await scanDir(dirHandle, videos, thumbs);
+  // Attach series posters after the full scan — a show's thumb may be discovered
+  // after its episodes (directory iteration order isn't guaranteed).
+  for (const v of videos) {
+    if (v.show && thumbs[v.show]) v.posterUrl = thumbs[v.show];
+  }
   return videos.sort(
     (a, b) =>
       (a.show ?? "").localeCompare(b.show ?? "") ||

@@ -13,6 +13,7 @@ interface Props {
 export const ShowCard = ({ show, heroVideo, seasonCount, episodeCount, onClick }: Props) => {
   const [hovered, setHovered] = useState(false);
   const [thumbnail, setThumbnail] = useState<string | null>(() => {
+    if (heroVideo.posterUrl) return heroVideo.posterUrl;
     const cached = getCachedThumbnail(heroVideo.id);
     return cached !== undefined ? cached : null;
   });
@@ -20,6 +21,7 @@ export const ShowCard = ({ show, heroVideo, seasonCount, episodeCount, onClick }
   const generating = useRef(false);
 
   useEffect(() => {
+    if (heroVideo.posterUrl) return; // series poster wins — skip frame generation
     if (getCachedThumbnail(heroVideo.id) !== undefined) return;
     if (generating.current) return;
 
@@ -39,7 +41,7 @@ export const ShowCard = ({ show, heroVideo, seasonCount, episodeCount, onClick }
 
     if (cardRef.current) observer.observe(cardRef.current);
     return () => observer.disconnect();
-  }, [heroVideo.id, heroVideo.objectUrl]);
+  }, [heroVideo.id, heroVideo.objectUrl, heroVideo.posterUrl]);
 
   return (
     <button

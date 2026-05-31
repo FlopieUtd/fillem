@@ -91,13 +91,14 @@ export const Library = () => {
   // Generate hero background thumbnail (just one)
   useEffect(() => {
     if (!heroVideo) return;
+    if (heroVideo.posterUrl) { setHeroThumbnail(heroVideo.posterUrl); return; }
     const cached = getCachedThumbnail(heroVideo.id);
     if (cached !== undefined) { setHeroThumbnail(cached); return; }
     generateThumbnail(heroVideo.objectUrl).then((url) => {
       setCachedThumbnail(heroVideo.id, url);
       setHeroThumbnail(url);
     });
-  }, [heroVideo?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [heroVideo?.id, heroVideo?.posterUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Prime continue-watching videos at their resume positions so playback starts instantly.
   // Keyed only on video IDs — progress updates must not re-trigger this or they'll spam

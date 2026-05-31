@@ -4,6 +4,9 @@ import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 const SUPPORTED = /\.(mp4|mkv|webm|mov|avi|m4v)$/i;
+const THUMB = /^thumb\.(jpe?g|png|webp)$/i;
+// Files the /videos route may serve: playable media + series posters.
+const SERVABLE = /\.(mp4|mkv|webm|mov|avi|m4v|jpe?g|png|webp)$/i;
 
 const MIME: Record<string, string> = {
   ".mp4": "video/mp4",
@@ -12,23 +15,33 @@ const MIME: Record<string, string> = {
   ".mov": "video/quicktime",
   ".avi": "video/x-msvideo",
   ".m4v": "video/x-m4v",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
 };
 
 interface VideoEntry {
   name: string;
   relativePath: string;
   size: number;
+  thumb?: string;
 }
 
-const scanDir = (dir: string, base: string): VideoEntry[] => {
+// Maps a show's root folder name → its thumb relativePath (e.g. "Bluey/thumb.jpg")
+const scanDir = (dir: string, base: string, thumbs: Record<string, string>): VideoEntry[] => {
   const results: VideoEntry[] = [];
   for (const entry of fs.readdirSync(dir)) {
     const fullPath = path.join(dir, entry);
     const stat = fs.statSync(fullPath);
     if (stat.isDirectory()) {
-      results.push(...scanDir(fullPath, base ? `${base}/${entry}` : entry));
+      results.push(...scanDir(fullPath, base ? `${base}/${entry}` : entry, thumbs));
     } else if (SUPPORTED.test(entry)) {
       results.push({ name: entry, relativePath: base ? `${base}/${entry}` : entry, size: stat.size });
+    } else if (THUMB.test(entry) && base) {
+      // A thumb belongs to the series at the top of its path
+      const showRoot = base.split("/")[0];
+      thumbs[showRoot] ??= base ? `${base}/${entry}` : entry;
     }
   }
   return results;
@@ -42,9 +55,10 @@ export function mediaPlugin(mediaDir: string): Plugin {
 
       server.middlewares.use("/api/videos", (_req: IncomingMessage, res: ServerResponse) => {
         try {
-          const videos = scanDir(mediaDir, "").sort((a, b) =>
-            a.relativePath.localeCompare(b.relativePath)
-          );
+          const thumbs: Record<string, string> = {};
+          const videos = scanDir(mediaDir, "", thumbs)
+            .map((v) => ({ ...v, thumb: thumbs[v.relativePath.split("/")[0]] }))
+            .sort((a, b) => a.relativePath.localeCompare(b.relativePath));
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify(videos));
         } catch {
@@ -57,7 +71,7 @@ export function mediaPlugin(mediaDir: string): Plugin {
         const raw = req.url ?? "";
         const relativePath = decodeURIComponent(raw.startsWith("/") ? raw.slice(1) : raw);
 
-        if (!relativePath || !SUPPORTED.test(relativePath) || relativePath.includes("..")) {
+        if (!relativePath || !SERVABLE.test(relativePath) || relativePath.includes("..")) {
           res.statusCode = 400;
           res.end();
           return;
