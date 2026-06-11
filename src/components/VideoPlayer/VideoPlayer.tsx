@@ -125,20 +125,13 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
     };
   }, []);
 
-  // Sync fullscreen state; exit player when user escapes fullscreen
+  // Sync fullscreen state. Leaving fullscreen keeps the player open as a
+  // window-filling overlay — only the Close button returns to the menu.
   useEffect(() => {
-    const onChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-      if (!document.fullscreenElement) {
-        // Save synchronously before the parent re-renders and reads localStorage
-        const p = progressRef.current;
-        if (p.duration > 0 && !(videoRef.current?.ended)) saveProgress(p.id, p.time, p.duration);
-        onClose();
-      }
-    };
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", onChange);
     return () => document.removeEventListener("fullscreenchange", onChange);
-  }, [onClose]);
+  }, []);
 
   // On video change: save previous video's progress, then set up new video
   useEffect(() => {
@@ -290,9 +283,10 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
       : containerRef.current?.requestFullscreen();
 
   const handleClose = () => {
+    // Save synchronously before the parent re-renders and reads localStorage
     const p = progressRef.current;
     if (p.duration > 0 && !(videoRef.current?.ended)) saveProgress(p.id, p.time, p.duration);
-    document.exitFullscreen().catch(() => {});
+    onClose();
   };
 
   // Standard "previous" behavior: restart the current episode if we're past the
