@@ -339,6 +339,14 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
   const VolumeIcon = muted || volume === 0 ? IconVolumeMute : volume < 0.5 ? IconVolumeLow : IconVolumeHigh;
   const progress = duration ? (currentTime / duration) * 100 : 0;
 
+  // displayName is "E03 · Title" for episodes — prepend the series number from
+  // the filename's SxxEyy tag, falling back to a number in the season folder.
+  const seriesNum = video.name.match(/S(\d+)\s*E\d+/i)?.[1] ?? video.season?.match(/\d+/)?.[0];
+  const bannerTitle =
+    seriesNum && /^E\d+/i.test(video.displayName)
+      ? `S${seriesNum.padStart(2, "0")} ${video.displayName}`
+      : video.displayName;
+
   return (
     <div
       ref={containerRef}
@@ -446,7 +454,9 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
         }`}
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-white text-[22px] font-semibold drop-shadow-lg">{video.displayName}</h2>
+          <h2 className="text-white text-[22px] font-semibold drop-shadow-lg truncate min-w-0">
+            {bannerTitle}
+          </h2>
           <div className="flex items-center gap-[12px]">
             {/* Sleep timer button + popover */}
             <div ref={timerButtonRef} className="relative">
