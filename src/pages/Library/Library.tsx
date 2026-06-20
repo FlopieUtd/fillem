@@ -382,6 +382,7 @@ export const Library = () => {
           progressMap={progressMap}
           onPlay={(v) => { setActiveShow(null); handleCardClick(v); }}
           onClose={() => setActiveShow(null)}
+          onProgressChange={() => setProgressMap(getAllProgress())}
         />
       )}
 

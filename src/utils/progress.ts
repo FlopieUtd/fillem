@@ -33,3 +33,11 @@ export const clearProgress = (videoId: string) => {
   delete map[videoId];
   localStorage.setItem(KEY, JSON.stringify(map));
 };
+
+// Reset progress for a batch of videos in one write — used to start a clean
+// rewatch of a show or season without touching unrelated entries.
+export const clearProgressFor = (videoIds: string[]) => {
+  const map = load();
+  for (const id of videoIds) delete map[id];
+  localStorage.setItem(KEY, JSON.stringify(map));
+};
