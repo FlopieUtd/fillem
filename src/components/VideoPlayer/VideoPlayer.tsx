@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { VideoFile } from "../../types/media";
 import { getProgress, saveProgress } from "../../utils/progress";
+import { addWatchSeconds } from "../../utils/watchTime";
 
 interface Props {
   video: VideoFile;
@@ -221,6 +222,27 @@ export const VideoPlayer = ({ video, onClose, onPrev, onNext }: Props) => {
       if (videoRef.current && !videoRef.current.paused && p.duration > 0) {
         saveProgress(p.id, p.time, p.duration);
       }
+    }, 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Tally real time spent watching into per-day buckets. We credit the smaller
+  // of elapsed wall-clock and the video's own currentTime advance: currentTime
+  // alone ignores pauses, throttled timers and the startup/loading gap, while
+  // capping it to wall-clock time discards forward-seek jumps. Backward seeks
+  // and episode changes go negative and are dropped by addWatchSeconds.
+  useEffect(() => {
+    let lastWall = Date.now();
+    let lastTime = 0;
+    const id = setInterval(() => {
+      const el = videoRef.current;
+      const now = Date.now();
+      const wallDelta = (now - lastWall) / 1000;
+      lastWall = now;
+      if (!el) return;
+      const played = el.currentTime - lastTime;
+      lastTime = el.currentTime;
+      if (!el.paused && !el.ended) addWatchSeconds(Math.min(played, wallDelta));
     }, 5000);
     return () => clearInterval(id);
   }, []);

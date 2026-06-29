@@ -206,6 +206,16 @@ export const Library = () => {
         </div>
 
         <div className="flex items-center gap-[8px] ml-auto">
+          <button
+            onClick={() => navigate("/stats")}
+            className="flex items-center gap-[6px] px-[12px] py-[6px] rounded-[4px] bg-white/10 hover:bg-white/20 text-[13px] text-white/80 transition-colors"
+            aria-label="Watch time stats"
+          >
+            <svg className="w-[16px] h-[16px]" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M5 9.2h3V19H5V9.2zM10.6 5h2.8v14h-2.8V5zm5.6 8H19v6h-2.8v-6z" />
+            </svg>
+            Stats
+          </button>
           {"showDirectoryPicker" in window && (
             <button
               onClick={handleAddFolder}
