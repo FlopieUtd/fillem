@@ -9,8 +9,6 @@ interface Day {
   seconds: number;
 }
 
-const DAY_MS = 86400000;
-
 const formatDuration = (s: number) => {
   const h = Math.floor(s / 3600);
   const m = Math.round((s % 3600) / 60);
@@ -19,11 +17,13 @@ const formatDuration = (s: number) => {
   return s > 0 ? "<1m" : "0m";
 };
 
-// Monday-start week containing the given date.
+// Monday-start week containing the given date. setDate normalizes across month
+// boundaries and DST transitions — fixed-ms arithmetic would skip or repeat a
+// day in timezones whose clocks shift at midnight.
 const startOfWeek = (d: Date) => {
   const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const day = (date.getDay() + 6) % 7;
-  return new Date(date.getTime() - day * DAY_MS);
+  date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+  return date;
 };
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -44,7 +44,7 @@ export const Stats = () => {
     if (view === "week") {
       const start = startOfWeek(anchor);
       return Array.from({ length: 7 }, (_, i) => {
-        const date = new Date(start.getTime() + i * DAY_MS);
+        const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
         return { date, seconds: watch[dateKey(date)] ?? 0 };
       });
     }
@@ -69,7 +69,7 @@ export const Stats = () => {
 
   const shift = (dir: -1 | 1) => {
     setAnchor((prev) => {
-      if (view === "week") return new Date(prev.getTime() + dir * 7 * DAY_MS);
+      if (view === "week") return new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + dir * 7);
       return new Date(prev.getFullYear(), prev.getMonth() + dir, 1);
     });
   };
@@ -96,6 +96,7 @@ export const Stats = () => {
             <button
               key={v}
               onClick={() => { setView(v); setAnchor(new Date()); }}
+              aria-pressed={view === v}
               className={`px-[20px] h-[34px] rounded-[4px] text-[14px] font-medium capitalize transition-colors ${
                 view === v ? "bg-[#e50914] text-white" : "text-white/70 hover:text-white"
               }`}
